@@ -2,6 +2,10 @@
   "name": "dappnode-cert-api",
   "version": "1.0.0",
   "description": "dAppNode SSL certificate API",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/Shard-Labs/dappnode-cert-api.git"
+  },
   "main": "dist/index.js",
   "scripts": {
     "prebuild": "rm -rf dist/* && tslint -c tslint.json -p    tsconfig.json --fix",
