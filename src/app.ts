@@ -1,136 +1,151 @@
-import express from 'express';
-import fileUpload from 'express-fileupload';
-import path from 'path';
-import {exec, ChildProcess} from 'child_process';
-import asyncHandler from 'express-async-handler';
-import fs from 'fs';
-import rateLimit from 'express-rate-limit';
-import EthCrypto from 'eth-crypto';
+import { ChildProcess, exec } from "child_process";
+import EthCrypto from "eth-crypto";
+import express, { NextFunction, Request, Response } from "express";
+import asyncHandler from "express-async-handler";
+import rateLimit from "express-rate-limit";
+import { query, validationResult } from "express-validator";
+import fs from "fs";
+import morgan from "morgan";
+import multer from "multer";
+import path from "path";
+import config from "./config";
+import { RequestQueryOptions } from "./types";
+import { createIfNotExists, promisifyChildProcess } from "./utils";
 
-import {createIfNotExists, promisifyChildProcess} from './utils';
+const timeThreshold: number = parseInt(config.timeThreshold, 10);
+const renewalTimeThreshold: number = parseInt(config.renewalTimeThreshold, 10);
 
-// ENVIRONMENT
-const BASE_DIR: string = process.env.BASE_DIR || '/etc/letsencrypt/'
-const CREDS_LOCATION: string = process.env.CREDS_LOCATION || path.join(BASE_DIR, 'creds.ini');
-const EMAIL_OPTION: string = process.env.LETSENCRYPT_EMAIL?'-m ' + process.env.LETSENCRYPT_EMAIL:'--register-unsafely-without-email';
-const time_threshold:number = parseInt(process.env.DYNDNS_THRESHOLD || "600");
-const RENEWAL_TIME_THRESHOLD: number = parseInt(process.env.RENEWAL_TIME_TRESHOLD || "6500000")
-
-
-// BUILDING DIRS
-const CSR_DIR: string = path.join(BASE_DIR, 'csr'); createIfNotExists(CSR_DIR);
-const CERT_DIR: string = path.join(BASE_DIR, 'cert'); createIfNotExists(CERT_DIR);
-const CHAIN_DIR: string = path.join(BASE_DIR, 'chain'); createIfNotExists(CHAIN_DIR);
-const FULLCHAIN_DIR: string = path.join(BASE_DIR, 'fullchain'); createIfNotExists(FULLCHAIN_DIR);
-
-const errmesg: string = "An error has ocurred. If necessary, contact dAppNode team with following log: ";
 const app = express();
+const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(fileUpload({
-    limits: {fileSize: 100 * 1024},
-    abortOnLimit: true
-  }));
-
-
-app.use(rateLimit({
+app.use(
+  rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 5 
-  }));
+    max: 5,
+  })
+);
 
-
-app.post('/', asyncHandler(async (req, res, next) => {
-  
-  const address: string = req.query.address as string;
-  const timestamp: number = parseInt(req.query.timestamp as string, 10);
-  const sig: string = req.query.sig as string;
-  let signAddress: string = "0x0";
-  const epoch: number = Math.floor(new Date().getTime() / 1000);
-  let forceUpdate: string = "no";
-  if ("force" in req.query) {
-    forceUpdate = req.query.force as string;
-  }
-
-  if (time_threshold >= timestamp) console.log(`Warning: Threshold ${time_threshold} is bigger than timestamp.`);
-
-  if (!timestamp && !sig && !address) {
-    res.status(200).send(JSON.stringify({ message: "DAppNode Cert" }));
-    return;
-  }
-
-  if (!timestamp || !sig || !address) {
-    res.status(400).send(JSON.stringify({ message: "Missing parameter(s)" }));
-    return;
-  }
-
-  try {
-    signAddress = EthCrypto.recover(sig, EthCrypto.hash.keccak256(timestamp.toString()));
-  } catch (err) {
-    res.status(400).send(JSON.stringify({ message: "Signing error: " + err.message }));
-    return;
-  }
-
-  // Check if provided timestamp is in sync with us.
-  const validTimestamp: boolean = epoch <= timestamp + time_threshold && epoch >= timestamp - time_threshold;
-
-  if (signAddress.toLowerCase() !== address.toLowerCase()) {
-    res.status(400).send(JSON.stringify({ message: "Invalid address or signature." }));
-    return;
-  } else if (!validTimestamp) {
-    res.status(400).send(JSON.stringify({message: "Timestamp out of sync. Is your server syncronized?"}));
-    return;
-  }
-
-  if (!req.files || Object.keys(req.files).length === 0) {
-    res.status(400).send('No files were uploaded.')
-    return;
-  }
-
-  const file: fileUpload.UploadedFile = req.files.csr;
-  //const id: string = req.params.id;
-  const id: string = address.toLowerCase().substr(2).substring(0, 16);
-  const csr: string = id + '.csr';
-
-  // verify CSR
-  const csr_path: string = path.join(CSR_DIR, csr);
-  if(fs.existsSync(csr_path))
-  {
-    if(epoch - fs.statSync(csr_path).ctime.getDate()/1000 < RENEWAL_TIME_THRESHOLD && forceUpdate != "yes") {
-      return res.download(`${FULLCHAIN_DIR}/${id}.pem`)
+app.use(morgan("tiny"));
+app.post(
+  "/",
+  [
+    upload.single("csr"),
+    query("address")
+      .exists()
+      .matches("^0x[a-zA-Z0-9]+$")
+      .withMessage("Invalid address format"),
+    query("timestamp")
+      .exists()
+      .matches("^\\d+$")
+      .withMessage("Invalid timestamp"),
+    query("sig")
+      .exists()
+      .matches("^0x[a-zA-Z0-9]+$")
+      .withMessage("Invalid signature format"),
+    query("force").optional({ nullable: false }).isBoolean(),
+  ],
+  asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    else {
-      fs.rmSync(csr_path);
-      if(fs.existsSync(`${CHAIN_DIR}/${id}.pem`)) {
-        fs.rmSync(`${CHAIN_DIR}/${id}.pem`);
-        fs.rmSync(`${FULLCHAIN_DIR}/${id}.pem`);
-        fs.rmSync(`${CHAIN_DIR}/${id}.pem`);
+
+    const {
+      address,
+      timestamp,
+      sig,
+      force = true,
+    }: RequestQueryOptions = req.query as any;
+
+    const timestampNumber = parseInt(timestamp, 10);
+    const epoch: number = Math.floor(new Date().getTime() / 1000);
+
+    if (timeThreshold >= timestampNumber) {
+      console.log(
+        `Warning: Threshold ${timeThreshold} is bigger than timestamp`
+      );
+    }
+
+    const signAddress = EthCrypto.recover(
+      sig,
+      EthCrypto.hash.keccak256(timestamp.toString())
+    );
+
+    // validate signature
+    if (signAddress.toLowerCase() !== address.toLowerCase()) {
+      return res.status(400).json({ error: "Invalid address or signature" });
+    }
+
+    // check if provided timestamp is in sync with us
+    const validTimestamp: boolean =
+      epoch <= timestampNumber + timeThreshold &&
+      epoch >= timestampNumber - timeThreshold;
+
+    if (!validTimestamp) {
+      return res.status(400).json({ error: "Timestamp out of sync" });
+    }
+
+    const id: string = address.toLowerCase().substr(2).substring(0, 16);
+    const csr: string = id + ".csr";
+
+    createIfNotExists(path.join(config.baseDir, id));
+
+    const csrPath: string = path.join(config.baseDir, id, csr);
+    if (fs.existsSync(csrPath)) {
+      const csrTimestamp = fs.statSync(csrPath).ctime.getDate() / 1000;
+      const shouldRenew = epoch - csrTimestamp < renewalTimeThreshold && !force;
+
+      const fcPath = `${config.baseDir}/${id}/fullchain.pem`;
+      if (!shouldRenew && fs.existsSync(fcPath)) {
+        return res.sendFile(fcPath, {
+          headers: {
+            "Content-Type": "application/x-pem-file",
+          },
+        });
       }
     }
-  }
 
-  await file.mv(csr_path);
+    fs.writeFileSync(csrPath, req.file.buffer);
+    const options = [
+      config.email ? `-m ${config.email}` : "--register-unsafely-without-email",
+      `--dns-rfc2136 --dns-rfc2136-credentials ${config.credsPath}`,
+      `--cert-name ${id}`,
+      `--csr ${csrPath}`,
+    ];
 
-  const cmnd: string = `certbot certonly --test-cert --dns-rfc2136 --dns-rfc2136-credentials ${CREDS_LOCATION} --noninteractive ${EMAIL_OPTION} --agree-tos --cert-name ${id} --chain-path ${CHAIN_DIR}/${id}.pem --fullchain-path ${FULLCHAIN_DIR}/${id}.pem --cert-path ${CERT_DIR}/${id}.pem --csr ${csr_path}`
-  console.log(cmnd);
-  const exec_handler: ChildProcess = exec(cmnd);    //
-  let output: string = '';
-  let errout: string = '';
-  exec_handler.stdout.on('data', (data: string) => {
-    console.log('stdout: ' + data);
-    output += data;
-  });
-  exec_handler.stderr.on('data', (data: string) =>  {
-    console.log('stderr: ' + data);
-    errout += data;
-  });
+    const flags = options.join(" ");
+    const command: string = `certbot certonly --test-cert --noninteractive --agree-tos --force-renewal ${flags}`;
+    console.log(command);
 
-  promisifyChildProcess(exec_handler).then(()=> {
-    return res.download(`${FULLCHAIN_DIR}/${id}.pem`)
-  }).catch(()=>{
-    next(errmesg + errout);
+    const child: ChildProcess = exec(command);
+    child.stdout.on("data", (data: string) => console.log(data));
+    child.stderr.on("data", (data: string) => console.log(data));
+
+    promisifyChildProcess(child)
+      .then(() => {
+        return res.sendFile(`${config.baseDir}/${id}/fullchain.pem`, {
+          headers: {
+            "Content-Type": "application/x-pem-file",
+          },
+        });
+      })
+      .catch((err) => {
+        console.log(err);
+        next(err);
+      });
   })
+);
 
-}));
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  return res.status(500).json({
+    error: err,
+  });
+});
 
-export {app};
+app.use((req: Request, res: Response, next: NextFunction) => {
+  return res.status(404).json({
+    error: "Not Found",
+  });
+});
 
-
+export { app };

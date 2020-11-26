@@ -1,19 +1,9 @@
 FROM certbot/dns-rfc2136:v1.9.0
 
-RUN apk add --update nodejs npm
-#RUN addgroup -S node && adduser -S node -G node
-
-
-RUN mkdir -p /usr/app
-RUN mkdir -p /etc/letsencrypt/csr
-
-
-#RUN chown node:node /usr/app
-#USER node
+RUN apk add --update nodejs npm && mkdir -p /usr/app
 WORKDIR /usr/app
 
-COPY src ./src
-COPY *.json ./
+COPY . .
 
 RUN npm install 
 
