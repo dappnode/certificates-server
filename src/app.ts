@@ -140,7 +140,6 @@ app.post(
         return res.sendFile(`${certBaseDir}/fullchain.pem`, {
           headers: {
             "Content-Type": "application/x-pem-file",
-            "X-Existing-Certificate": id,
           },
         });
       })
