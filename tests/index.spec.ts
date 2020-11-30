@@ -62,5 +62,5 @@ describe("app", () => {
 
     console.log(response.body);
     expect(response.status).to.equal(200);
-  });
+  }).timeout(0); // disable timeout as this is a long running process
 });

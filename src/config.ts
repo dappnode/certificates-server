@@ -5,6 +5,7 @@ dotenv.config();
 const baseDir = process.env.BASE_DIR || "/etc/letsencrypt/";
 
 export default {
+  debug: process.env.DEBUG || false,
   timeThreshold: process.env.DYNDNS_THRESHOLD || "600",
   renewalTimeThreshold: process.env.RENEWAL_TIME_TRESHOLD || "6500000",
   email: process.env.LETSENCRYPT_EMAIL,

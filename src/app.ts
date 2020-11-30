@@ -88,14 +88,15 @@ app.post(
     const id: string = address.toLowerCase().substr(2).substring(0, 16);
     const csr: string = id + ".csr";
 
-    createIfNotExists(path.join(config.baseDir, id));
+    const certBaseDir = path.join(config.baseDir, id);
+    createIfNotExists(certBaseDir);
 
-    const csrPath: string = path.join(config.baseDir, id, csr);
+    const csrPath: string = path.join(certBaseDir, csr);
     if (fs.existsSync(csrPath)) {
       const csrTimestamp = fs.statSync(csrPath).ctime.getDate() / 1000;
       const shouldRenew = epoch - csrTimestamp < renewalTimeThreshold && !force;
 
-      const fcPath = `${config.baseDir}/${id}/fullchain.pem`;
+      const fcPath = `${certBaseDir}/fullchain.pem`;
       if (!shouldRenew && fs.existsSync(fcPath)) {
         return res.sendFile(fcPath, {
           headers: {
@@ -107,14 +108,19 @@ app.post(
 
     fs.writeFileSync(csrPath, req.file.buffer);
     const options = [
+      config.debug ? "--test-cert" : "",
       config.email ? `-m ${config.email}` : "--register-unsafely-without-email",
       `--dns-rfc2136 --dns-rfc2136-credentials ${config.credsPath}`,
       `--cert-name ${id}`,
+      `--key-path "${certBaseDir}/privkey.pem"`,
+      `--chain-path "${certBaseDir}/chain.pem"`,
+      `--fullchain-path "${certBaseDir}/fullchain.pem"`,
+      `--cert-path "${certBaseDir}/cert.pem"`,
       `--csr ${csrPath}`,
     ];
 
     const flags = options.join(" ");
-    const command: string = `certbot certonly --test-cert --noninteractive --agree-tos --force-renewal ${flags}`;
+    const command: string = `certbot certonly --noninteractive --agree-tos --force-renewal ${flags}`;
     console.log(command);
 
     const child: ChildProcess = exec(command);
@@ -123,7 +129,7 @@ app.post(
 
     promisifyChildProcess(child)
       .then(() => {
-        return res.sendFile(`${config.baseDir}/${id}/fullchain.pem`, {
+        return res.sendFile(`${certBaseDir}/fullchain.pem`, {
           headers: {
             "Content-Type": "application/x-pem-file",
           },

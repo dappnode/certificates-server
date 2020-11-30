@@ -5,7 +5,9 @@ WORKDIR /usr/app
 
 COPY . .
 
-RUN npm install 
+RUN npm install
 
 EXPOSE 5000
-ENTRYPOINT npm start
+
+ENTRYPOINT ["npm", "run"]
+CMD ["start"]
