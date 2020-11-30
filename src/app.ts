@@ -20,8 +20,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(
   rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 5,
+    windowMs: parseInt(config.rateLimitWindowMs),
+    max: config.debug ? 0 : parseInt(config.rateLimitMax),
   })
 );
 
@@ -101,22 +101,30 @@ app.post(
         return res.sendFile(fcPath, {
           headers: {
             "Content-Type": "application/x-pem-file",
+            "X-Certificate-Cache": id,
           },
         });
       }
     }
 
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ error: "Missing Certificate Signing Request (CSR)" });
+    }
+
     fs.writeFileSync(csrPath, req.file.buffer);
+
     const options = [
       config.debug ? "--test-cert" : "",
       config.email ? `-m ${config.email}` : "--register-unsafely-without-email",
-      `--dns-rfc2136 --dns-rfc2136-credentials ${config.credsPath}`,
+      `--dns-rfc2136 --dns-rfc2136-credentials "${config.credsPath}"`,
       `--cert-name ${id}`,
       `--key-path "${certBaseDir}/privkey.pem"`,
       `--chain-path "${certBaseDir}/chain.pem"`,
       `--fullchain-path "${certBaseDir}/fullchain.pem"`,
       `--cert-path "${certBaseDir}/cert.pem"`,
-      `--csr ${csrPath}`,
+      `--csr "${csrPath}"`,
     ];
 
     const flags = options.join(" ");
@@ -132,6 +140,7 @@ app.post(
         return res.sendFile(`${certBaseDir}/fullchain.pem`, {
           headers: {
             "Content-Type": "application/x-pem-file",
+            "X-Existing-Certificate": id,
           },
         });
       })

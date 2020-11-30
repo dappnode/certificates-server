@@ -5,22 +5,32 @@ import { ethers } from "ethers";
 import fs from "fs";
 import "mocha";
 import path from "path";
-import { agent } from "supertest";
+import { agent, SuperAgentTest } from "supertest";
 import { promisify } from "util";
 import { app } from "../src/app";
+import config from "../src/config";
 import { createIfNotExists } from "../src/utils";
 
 describe("app", () => {
-  it("should generate certificate", async () => {
-    const identity: ethers.Wallet = ethers.Wallet.createRandom();
-    const timestamp: number = Math.floor(Date.now() / 1000);
-    const wallet: ethers.Wallet = new ethers.Wallet(identity.privateKey);
+  let request: SuperAgentTest;
+  let wallet: ethers.Wallet;
 
-    console.log("Generated random wallet with\nPublic key:" + wallet.publicKey);
+  before(async () => {
+    request = agent(app);
+    wallet = ethers.Wallet.createRandom();
+
+    console.log(
+      "Generated random wallet with\nPublic key: " + wallet.publicKey
+    );
     console.log("Private key: " + wallet.privateKey);
+  });
 
+  const createParameters = (
+    wallet: ethers.Wallet,
+    timestamp: number
+  ): string[] => {
     const signingKey: ethers.utils.SigningKey = new ethers.utils.SigningKey(
-      identity.privateKey
+      wallet.privateKey
     );
     const signDigest: any = signingKey.signDigest.bind(signingKey);
     const hash: string = ethers.utils.solidityKeccak256(
@@ -28,20 +38,36 @@ describe("app", () => {
       [timestamp.toString()]
     );
     const signature: string = ethers.utils.joinSignature(signDigest(hash));
-    const parameters = [
+    return [
       `address=${wallet.address}`,
       `timestamp=${timestamp}`,
       `sig=${signature}`,
-      "force=true",
     ];
-    console.log("Parameters: " + parameters.join("&"));
+  };
+
+  it("should fail with validation errors", async () => {
+    const response = await request.post("/").send();
+    expect(response.status).to.equal(400);
+  });
+
+  it("should fail with out of sync timestamp", async () => {
+    const timestamp: number =
+      Math.floor(Date.now() / 1000) + parseInt(config.timeThreshold) + 1;
+
+    const parameters = createParameters(wallet, timestamp);
+    const response = await request.post(`/?${parameters.join("&")}`).send();
+
+    expect(response.status).to.equal(400);
+  });
+
+  it("should generate certificate", async () => {
+    const timestamp: number = Math.floor(Date.now() / 1000);
+    const parameters = createParameters(wallet, timestamp);
 
     const domain: string = `${wallet.address
       .toLowerCase()
       .substr(2)
       .substring(0, 16)}.dyndns.dappnode.io`;
-
-    console.log("Domain: " + domain);
 
     const certDir: string = path.resolve(__dirname, "certs");
     createIfNotExists(certDir);
@@ -59,8 +85,19 @@ describe("app", () => {
       .attach("csr", fs.createReadStream(csrFile));
 
     del.sync(certDir);
-
-    console.log(response.body);
     expect(response.status).to.equal(200);
   }).timeout(0); // disable timeout as this is a long running process
+
+  it("should return existing certificate", async () => {
+    const id = wallet.address.substr(2).substring(0, 16).toLowerCase();
+    const timestamp: number = Math.floor(Date.now() / 1000);
+    const parameters = createParameters(wallet, timestamp);
+
+    const response = await agent(app)
+      .post(`/?${parameters.join("&")}`)
+      .send();
+
+    expect(response.status).to.equal(200);
+    expect(response.headers["x-certificate-cache"]).to.equal(id);
+  });
 });
