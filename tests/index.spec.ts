@@ -64,10 +64,8 @@ describe("app", () => {
     const timestamp: number = Math.floor(Date.now() / 1000);
     const parameters = createParameters(wallet, timestamp);
 
-    const domain: string = `${wallet.address
-      .toLowerCase()
-      .substr(2)
-      .substring(0, 16)}.dyndns.dappnode.io`;
+    const id = wallet.address.toLowerCase().substr(2).substring(0, 16);
+    const domain: string = `${id}.dyndns.dappnode.io`;
 
     const certDir: string = path.resolve(__dirname, "certs");
     createIfNotExists(certDir);
