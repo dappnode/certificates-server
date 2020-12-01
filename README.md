@@ -16,6 +16,19 @@ docker run --rm -it -p 5000:5000 \
 
 where `<PATH>` is the path to the `creds.ini` file on your host machine eg.
 
+```
+# Target DNS server
+dns_rfc2136_server = ns.yourdomain.com
+# Target DNS port
+dns_rfc2136_port = 53
+# TSIG key name
+dns_rfc2136_name = <private key name>
+# TSIG key secret
+dns_rfc2136_secret = <private key>
+# TSIG key algorithm
+dns_rfc2136_algorithm = HMAC-SHA512
+```
+
 ## Run tests
 
 ```bash
