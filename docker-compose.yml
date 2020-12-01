@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  cert-api:
+    build: .
+    ports: 
+      - "5000:5000"
+    volumes: 
+      - "cert-config:/etc/letsencrypt/creds.ini:ro"
+    environment: 
+      - DEBUG=1
