@@ -46,7 +46,7 @@ app.post(
       .exists()
       .matches("^0x[a-zA-Z0-9]+$")
       .withMessage("Invalid signature format"),
-    query("force").optional({ nullable: false }).isBoolean(),
+    query("force").optional({ nullable: false }).isBoolean().toBoolean(),
   ],
   asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const errors = validationResult(req);
@@ -59,7 +59,7 @@ app.post(
       timestamp,
       signer,
       signature,
-      force = true,
+      force = false
     }: RequestQueryOptions = req.query as any;
 
     const timestampNumber = parseInt(timestamp, 10);
@@ -98,8 +98,8 @@ app.post(
 
     const csrPath: string = path.join(certBaseDir, csr);
     if (fs.existsSync(csrPath)) {
-      const csrTimestamp = fs.statSync(csrPath).ctime.getDate() / 1000;
-      const shouldRenew = epoch - csrTimestamp < renewalTimeThreshold && !force;
+      const csrTimestamp = fs.statSync(csrPath).ctime.getTime() / 1000;
+      const shouldRenew = epoch - csrTimestamp > renewalTimeThreshold || force;
 
       const fcPath = `${certBaseDir}/fullchain.pem`;
       if (!shouldRenew && fs.existsSync(fcPath)) {
