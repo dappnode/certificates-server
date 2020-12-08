@@ -13,4 +13,5 @@ export default {
   email: process.env.LETSENCRYPT_EMAIL,
   baseDir,
   credsPath: process.env.CREDS_LOCATION || path.join(baseDir, "creds.ini"),
+  signaturePrefix: "\x1dDappnode Signed Message:"
 };

@@ -1,6 +1,7 @@
 export interface RequestQueryOptions {
   address: string;
   timestamp: string;
-  sig: string;
+  signer: string;
+  signature: string;
   force: boolean;
 }

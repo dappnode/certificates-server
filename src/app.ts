@@ -10,7 +10,7 @@ import multer from "multer";
 import path from "path";
 import config from "./config";
 import { RequestQueryOptions } from "./types";
-import { createIfNotExists, promisifyChildProcess } from "./utils";
+import { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage } from "./utils";
 
 const timeThreshold: number = parseInt(config.timeThreshold, 10);
 const renewalTimeThreshold: number = parseInt(config.renewalTimeThreshold, 10);
@@ -34,11 +34,15 @@ app.post(
       .exists()
       .matches("^0x[a-zA-Z0-9]+$")
       .withMessage("Invalid address format"),
-    query("timestamp")
+      query("timestamp")
       .exists()
       .matches("^\\d+$")
       .withMessage("Invalid timestamp"),
-    query("sig")
+    query("signer")
+      .exists()
+      .isString()
+      .withMessage("Invalid signer"),
+    query("signature")
       .exists()
       .matches("^0x[a-zA-Z0-9]+$")
       .withMessage("Invalid signature format"),
@@ -53,7 +57,8 @@ app.post(
     const {
       address,
       timestamp,
-      sig,
+      signer,
+      signature,
       force = true,
     }: RequestQueryOptions = req.query as any;
 
@@ -67,13 +72,13 @@ app.post(
     }
 
     const signAddress = EthCrypto.recover(
-      sig,
-      EthCrypto.hash.keccak256(timestamp.toString())
+      signature,
+      EthCrypto.hash.keccak256(prepareMessageFromPackage(signer, timestamp))
     );
 
     // validate signature
     if (signAddress.toLowerCase() !== address.toLowerCase()) {
-      return res.status(400).json({ error: "Invalid address or signature" });
+      return res.status(400).json({ error: "Invalid address, signer or signature" });
     }
 
     // check if provided timestamp is in sync with us

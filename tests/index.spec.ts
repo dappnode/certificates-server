@@ -9,7 +9,7 @@ import { agent, SuperAgentTest } from "supertest";
 import { promisify } from "util";
 import { app } from "../src/app";
 import config from "../src/config";
-import { createIfNotExists } from "../src/utils";
+import { createIfNotExists, prepareMessageFromPackage } from "../src/utils";
 
 describe("app", () => {
   let request: SuperAgentTest;
@@ -33,15 +33,17 @@ describe("app", () => {
       wallet.privateKey
     );
     const signDigest: any = signingKey.signDigest.bind(signingKey);
+    const signer: string = "https-portal";
     const hash: string = ethers.utils.solidityKeccak256(
       ["string"],
-      [timestamp.toString()]
+      [prepareMessageFromPackage(signer, timestamp.toString())]
     );
     const signature: string = ethers.utils.joinSignature(signDigest(hash));
     return [
       `address=${wallet.address}`,
       `timestamp=${timestamp}`,
-      `sig=${signature}`,
+      `signer=${signer}`,
+      `signature=${signature}`,
     ];
   };
 

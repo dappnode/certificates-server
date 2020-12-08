@@ -1,5 +1,6 @@
 import fs from "fs";
 import { ChildProcess } from "child_process";
+import singaturePrefix from "./config";
 
 function createIfNotExists(path: string) {
   if (!fs.existsSync(path)) {
@@ -20,4 +21,17 @@ function promisifyChildProcess(child: ChildProcess): Promise<void> {
     });
   });
 }
-export { createIfNotExists, promisifyChildProcess };
+
+function prepareMessageFromPackage(packageEnsName: string, data: string): string {
+  return (
+    singaturePrefix +
+    "\n" +
+    packageEnsName +
+    "\n" +
+    data.length +
+    "\n" +
+    data
+  );
+}
+
+export { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage};
