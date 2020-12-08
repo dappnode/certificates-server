@@ -23,15 +23,7 @@ function promisifyChildProcess(child: ChildProcess): Promise<void> {
 }
 
 function prepareMessageFromPackage(packageEnsName: string, data: string): string {
-  return (
-    singaturePrefix +
-    "\n" +
-    packageEnsName +
-    "\n" +
-    data.length +
-    "\n" +
-    data
-  );
+  return [singaturePrefix, packageEnsName, data.length, data].join("\n");
 }
 
 export { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage};
