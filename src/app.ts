@@ -1,5 +1,4 @@
 import { ChildProcess, exec } from "child_process";
-import EthCrypto from "eth-crypto";
 import express, { NextFunction, Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import rateLimit from "express-rate-limit";
@@ -11,6 +10,7 @@ import path from "path";
 import config from "./config";
 import { RequestQueryOptions } from "./types";
 import { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage } from "./utils";
+import { ethers } from "ethers";
 
 const timeThreshold: number = parseInt(config.timeThreshold, 10);
 const renewalTimeThreshold: number = parseInt(config.renewalTimeThreshold, 10);
@@ -70,11 +70,11 @@ app.post(
         `Warning: Threshold ${timeThreshold} is bigger than timestamp`
       );
     }
-
-    const signAddress = EthCrypto.recover(
-      signature,
-      EthCrypto.hash.keccak256(prepareMessageFromPackage(signer, timestamp))
+    const hash: string = ethers.utils.solidityKeccak256(
+      ["string"],
+      [prepareMessageFromPackage(signer, timestamp.toString())]
     );
+    const signAddress = ethers.utils.recoverAddress(hash, signature);
 
     // validate signature
     if (signAddress.toLowerCase() !== address.toLowerCase()) {
