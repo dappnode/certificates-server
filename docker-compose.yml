@@ -6,6 +6,6 @@ services:
     ports: 
       - "5000:5000"
     volumes: 
-      - "cert-config:/etc/letsencrypt/creds.ini:ro"
+      - "cert-data:/etc/letsencrypt/"
     environment: 
       - DEBUG=1
