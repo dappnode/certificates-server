@@ -26,7 +26,7 @@ dns_rfc2136_secret = <private key>
 # TSIG key algorithm
 dns_rfc2136_algorithm = HMAC-SHA512
 ```
-
+Note: Even though it is not necessary, it is a good practice to have whole `/etc/letsencrypt` folder mounted as a volume since all certificates are stored there. 
 ## Run tests
 
 ```bash
