@@ -1,6 +1,6 @@
 import fs from "fs";
 import { ChildProcess } from "child_process";
-import signaturePrefix from "./config";
+import config from "./config";
 
 function createIfNotExists(path: string) {
   if (!fs.existsSync(path)) {
@@ -23,7 +23,7 @@ function promisifyChildProcess(child: ChildProcess): Promise<void> {
 }
 
 function prepareMessageFromPackage(packageEnsName: string, data: string): string {
-  return [signaturePrefix, packageEnsName, data.length, data].join("\n");
+  return [config.signaturePrefix, packageEnsName, data.length, data].join("\n");
 }
 
 export { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage};

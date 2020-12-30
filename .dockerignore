@@ -1,5 +1,9 @@
 node_modules/
 dist/
+keys/
 .env
 .git
 creds.ini
+#tests/
+docker-compose.yml
+Dockerfile
