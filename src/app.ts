@@ -109,6 +109,9 @@ app.post(
             "X-Certificate-Cache": id,
           },
         });
+      } else {
+        fs.rmdirSync(certBaseDir, { recursive: true });
+        createIfNotExists(certBaseDir);
       }
     }
 
