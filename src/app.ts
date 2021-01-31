@@ -9,7 +9,7 @@ import multer from "multer";
 import path from "path";
 import config from "./config";
 import { RequestQueryOptions } from "./types";
-import { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage } from "./utils";
+import { promisifyChildProcess, prepareMessageFromPackage } from "./utils";
 import { ethers } from "ethers";
 
 const timeThreshold: number = parseInt(config.timeThreshold, 10);
@@ -94,8 +94,7 @@ app.post(
     const csr: string = id + ".csr";
 
     const certBaseDir = path.join(config.baseDir, id);
-    createIfNotExists(certBaseDir);
-
+    fs.mkdirSync(certBaseDir, {recursive: true});
     const csrPath: string = path.join(certBaseDir, csr);
     if (fs.existsSync(csrPath)) {
       const csrTimestamp = fs.statSync(csrPath).ctime.getTime() / 1000;
@@ -111,7 +110,7 @@ app.post(
         });
       } else {
         fs.rmdirSync(certBaseDir, { recursive: true });
-        createIfNotExists(certBaseDir);
+        fs.mkdirSync(certBaseDir, {recursive: true});
       }
     }
 

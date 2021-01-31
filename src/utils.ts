@@ -2,12 +2,6 @@ import fs from "fs";
 import { ChildProcess } from "child_process";
 import config from "./config";
 
-function createIfNotExists(path: string) {
-  if (!fs.existsSync(path)) {
-    fs.mkdirSync(path);
-  }
-}
-
 function promisifyChildProcess(child: ChildProcess): Promise<void> {
   return new Promise((resolve, reject) => {
     child.addListener("error", reject);
@@ -26,4 +20,4 @@ function prepareMessageFromPackage(packageEnsName: string, data: string): string
   return [config.signaturePrefix, packageEnsName, data.length, data].join("\n");
 }
 
-export { createIfNotExists, promisifyChildProcess, prepareMessageFromPackage};
+export { promisifyChildProcess, prepareMessageFromPackage};
