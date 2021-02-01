@@ -9,7 +9,7 @@ import { agent, SuperAgentTest } from "supertest";
 import { promisify } from "util";
 import { app } from "../src/app";
 import config from "../src/config";
-import { createIfNotExists, prepareMessageFromPackage } from "../src/utils";
+import { prepareMessageFromPackage } from "../src/utils";
 
 describe("app", () => {
   let request: SuperAgentTest;
@@ -70,7 +70,7 @@ describe("app", () => {
     const domain: string = `${id}.dyndns.dappnode.io`;
 
     const certDir: string = path.resolve(__dirname, "certs");
-    createIfNotExists(certDir);
+    fs.mkdirSync(certDir, { recursive: true });
 
     await promisify(csrgen)(domain, {
       outputDir: certDir,
