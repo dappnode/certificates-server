@@ -8,6 +8,7 @@ import morgan from "morgan";
 import multer from "multer";
 import path from "path";
 import config from "./config";
+import { tmpdir } from "os";
 import { RequestQueryOptions } from "./types";
 import { promisifyChildProcess, prepareMessageFromPackage } from "./utils";
 import { ethers } from "ethers";
@@ -31,19 +32,15 @@ app.post(
   [
     upload.single("csr"),
     query("address")
-      .exists()
       .matches("^0x[a-zA-Z0-9]+$")
       .withMessage("Invalid address format"),
-      query("timestamp")
-      .exists()
+    query("timestamp")
       .matches("^\\d+$")
       .withMessage("Invalid timestamp"),
     query("signer")
       .exists()
-      .isString()
       .withMessage("Invalid signer"),
     query("signature")
-      .exists()
       .matches("^0x[a-zA-Z0-9]+$")
       .withMessage("Invalid signature format"),
     query("force").optional({ nullable: false }).isBoolean().toBoolean(),
@@ -91,10 +88,16 @@ app.post(
     }
 
     const id: string = address.toLowerCase().substr(2).substring(0, 16);
-    const csr: string = id + ".csr";
+    const workDir: string = path.join(tmpdir(), `certbot-${id}`);
 
+    if (fs.existsSync(path.join(workDir, ".certbot.lock"))) {
+      return res.status(400).json({ error: `Another instance of Certbot is already running for id "${id}"` });
+    }
+
+    const csr: string = id + ".csr";
     const certBaseDir = path.join(config.baseDir, id);
-    fs.mkdirSync(certBaseDir, {recursive: true});
+    fs.mkdirSync(certBaseDir, { recursive: true });
+
     const csrPath: string = path.join(certBaseDir, csr);
     if (fs.existsSync(csrPath)) {
       const csrTimestamp = fs.statSync(csrPath).ctime.getTime() / 1000;
@@ -110,7 +113,7 @@ app.post(
         });
       } else {
         fs.rmdirSync(certBaseDir, { recursive: true });
-        fs.mkdirSync(certBaseDir, {recursive: true});
+        fs.mkdirSync(certBaseDir, { recursive: true });
       }
     }
 
@@ -132,6 +135,9 @@ app.post(
       `--fullchain-path "${certBaseDir}/fullchain.pem"`,
       `--cert-path "${certBaseDir}/cert.pem"`,
       `--csr "${csrPath}"`,
+      `--work-dir "${workDir}"`,
+      `--logs-dir "${path.join(workDir, "logs")}"`,
+      `--config-dir "${path.join(workDir, "config")}"`,
     ];
 
     const flags = options.join(" ");
