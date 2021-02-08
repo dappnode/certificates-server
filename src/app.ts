@@ -1,178 +1,162 @@
-import { ChildProcess, exec } from "child_process";
-import express, { NextFunction, Request, Response } from "express";
+import os from "os";
+import fs from "fs";
+import path from "path";
+import rimraf from "rimraf";
+import express, { ErrorRequestHandler, Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import rateLimit from "express-rate-limit";
-import { query, validationResult } from "express-validator";
-import fs from "fs";
 import morgan from "morgan";
 import multer from "multer";
-import path from "path";
 import config from "./config";
-import { tmpdir } from "os";
-import { RequestQueryOptions } from "./types";
-import { promisifyChildProcess, prepareMessageFromPackage } from "./utils";
-import { ethers } from "ethers";
+import {
+  shell,
+  HttpError,
+  BadRequestError,
+  isHex,
+  assertValidSignedDappnodeMessage
+} from "./utils";
 
-const timeThreshold: number = parseInt(config.timeThreshold, 10);
-const renewalTimeThreshold: number = parseInt(config.renewalTimeThreshold, 10);
+const maxCsrSize = 10e3; // 10 KB;
+const renewalTimeThresholdMs = config.renewalTimeThresholdSec * 1000;
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  // Prevent an attacker from filling the memory with a large file
+  limits: { fields: 1, fileSize: maxCsrSize, files: 1, parts: 1 }
+});
 
 app.use(
   rateLimit({
     windowMs: parseInt(config.rateLimitWindowMs),
-    max: config.debug ? 0 : parseInt(config.rateLimitMax),
+    max: config.debug ? 0 : config.rateLimitMax
   })
 );
+
+export interface RequestQueryOptions {
+  address: string;
+  timestamp: string;
+  signature: string;
+  force?: boolean;
+}
 
 app.use(morgan("tiny"));
 app.post(
   "/",
-  [
-    upload.single("csr"),
-    query("address")
-      .matches("^0x[a-zA-Z0-9]+$")
-      .withMessage("Invalid address format"),
-    query("timestamp")
-      .matches("^\\d+$")
-      .withMessage("Invalid timestamp"),
-    query("signer")
-      .exists()
-      .withMessage("Invalid signer"),
-    query("signature")
-      .matches("^0x[a-zA-Z0-9]+$")
-      .withMessage("Invalid signature format"),
-    query("force").optional({ nullable: false }).isBoolean().toBoolean(),
-  ],
-  asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+  upload.single("csr"),
+  asyncHandler(async (req, res) => {
+    const query = (req.query as unknown) as RequestQueryOptions;
+    const { address, signature } = query;
+    const timestamp = parseInt(query.timestamp, 10); // In seconds
+    const force = Boolean(query.force);
 
-    const {
-      address,
-      timestamp,
-      signer,
-      signature,
-      force = false
-    }: RequestQueryOptions = req.query as any;
+    const nowMs = Date.now();
+    const nowSec = nowMs / 1000;
 
-    const timestampNumber = parseInt(timestamp, 10);
-    const epoch: number = Math.floor(new Date().getTime() / 1000);
+    if (!address) throw new BadRequestError("param 'address' required");
+    if (!signature) throw new BadRequestError("param 'signature' required");
+    if (!timestamp) throw new BadRequestError("param 'timestamp' invalid");
 
-    if (timeThreshold >= timestampNumber) {
-      console.log(
-        `Warning: Threshold ${timeThreshold} is bigger than timestamp`
-      );
-    }
-    const hash: string = ethers.utils.solidityKeccak256(
-      ["string"],
-      [prepareMessageFromPackage(signer, timestamp.toString())]
-    );
-    const signAddress = ethers.utils.recoverAddress(hash, signature);
+    if (!isHex(address)) throw new BadRequestError("param 'address' invalid");
+    if (!isHex(signature))
+      throw new BadRequestError("param 'signature' invalid");
 
-    // validate signature
-    if (signAddress.toLowerCase() !== address.toLowerCase()) {
-      return res.status(400).json({ error: "Invalid address, signer or signature" });
-    }
+    // Validate timestamp is in threshold `timeThreshold`
+    if (Math.abs(nowSec - timestamp) > config.signedTimeThresholdSec)
+      throw new BadRequestError("timestamp out of bounds");
 
-    // check if provided timestamp is in sync with us
-    const validTimestamp: boolean =
-      epoch <= timestampNumber + timeThreshold &&
-      epoch >= timestampNumber - timeThreshold;
+    // Throws if the recovered address !== `address`
+    assertValidSignedDappnodeMessage({ address, signature, timestamp });
 
-    if (!validTimestamp) {
-      return res.status(400).json({ error: "Timestamp out of sync" });
-    }
-
-    const id: string = address.toLowerCase().substr(2).substring(0, 16);
-    const workDir: string = path.join(tmpdir(), `certbot-${id}`);
+    const userId = address.toLowerCase().substr(2).substring(0, 16);
+    const workDir = path.join(os.tmpdir(), `certbot-${userId}`);
 
     if (fs.existsSync(path.join(workDir, ".certbot.lock"))) {
-      return res.status(400).json({ error: `Another instance of Certbot is already running for id "${id}"` });
+      throw Error(`Certbot instance already running for ${userId}`);
     }
 
-    const csr: string = id + ".csr";
-    const certBaseDir = path.join(config.baseDir, id);
+    const csrFilename = userId + ".csr";
+    const certBaseDir = path.join(config.baseDir, userId);
+    const csrPath = path.join(certBaseDir, csrFilename);
+    const fullchainPath = path.join(certBaseDir, "fullchain.pem");
+    const chainPath = path.join(certBaseDir, "chain.pem");
+    const certPath = path.join(certBaseDir, "cert.pem");
+
+    const csrLastRenewedMs =
+      fs.existsSync(fullchainPath) &&
+      fs.statSync(fullchainPath).ctime.getTime();
+    const isStillValid =
+      csrLastRenewedMs && nowMs - csrLastRenewedMs < renewalTimeThresholdMs;
+
+    if (isStillValid && !force) {
+      return res.sendFile(fullchainPath, {
+        headers: {
+          "Content-Type": "application/x-pem-file",
+          "X-Certificate-Cache": userId
+        }
+      });
+    }
+
+    rimraf.sync(certBaseDir);
     fs.mkdirSync(certBaseDir, { recursive: true });
 
-    const csrPath: string = path.join(certBaseDir, csr);
-    if (fs.existsSync(csrPath)) {
-      const csrTimestamp = fs.statSync(csrPath).ctime.getTime() / 1000;
-      const shouldRenew = epoch - csrTimestamp > renewalTimeThreshold || force;
-
-      const fcPath = `${certBaseDir}/fullchain.pem`;
-      if (!shouldRenew && fs.existsSync(fcPath)) {
-        return res.sendFile(fcPath, {
-          headers: {
-            "Content-Type": "application/x-pem-file",
-            "X-Certificate-Cache": id,
-          },
-        });
-      } else {
-        fs.rmdirSync(certBaseDir, { recursive: true });
-        fs.mkdirSync(certBaseDir, { recursive: true });
-      }
-    }
-
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ error: "Missing Certificate Signing Request (CSR)" });
-    }
+    // Must attach Certificate Signing Request as "csr" formData
+    if (!req.file)
+      throw new BadRequestError("Missing Certificate Signing Request (CSR)");
+    if (req.file.buffer.length > maxCsrSize)
+      throw new BadRequestError("CSR to big");
 
     fs.writeFileSync(csrPath, req.file.buffer);
 
-    const options = [
-      config.debug ? "--test-cert" : "",
+    const command = [
+      "certbot",
+      "certonly",
+      "--noninteractive",
+      "--agree-tos",
+      "--force-renewal",
+      config.debug ? "--test-cert" : undefined,
       config.email ? `-m ${config.email}` : "--register-unsafely-without-email",
-      `--dns-rfc2136 --dns-rfc2136-credentials "${config.credsPath}"`,
-      `--cert-name ${id}`,
-      `--key-path "${certBaseDir}/privkey.pem"`,
-      `--chain-path "${certBaseDir}/chain.pem"`,
-      `--fullchain-path "${certBaseDir}/fullchain.pem"`,
-      `--cert-path "${certBaseDir}/cert.pem"`,
+      "--dns-rfc2136",
+      `--dns-rfc2136-credentials "${config.credsPath}"`,
+      `--cert-name ${userId}`,
+      `--chain-path "${chainPath}"`,
+      `--fullchain-path "${fullchainPath}"`,
+      `--cert-path "${certPath}"`,
       `--csr "${csrPath}"`,
       `--work-dir "${workDir}"`,
       `--logs-dir "${path.join(workDir, "logs")}"`,
-      `--config-dir "${path.join(workDir, "config")}"`,
-    ];
+      `--config-dir "${path.join(workDir, "config")}"`
+    ].filter((part): part is string => Boolean(part));
 
-    const flags = options.join(" ");
-    const command: string = `certbot certonly --noninteractive --agree-tos --force-renewal ${flags}`;
-    console.log(command);
+    await shell(command).catch(e => {
+      e.message = `Error running certbot: ${e.message}`;
+      console.error(e);
+      throw e;
+    });
 
-    const child: ChildProcess = exec(command);
-    child.stdout.on("data", (data: string) => console.log(data));
-    child.stderr.on("data", (data: string) => console.log(data));
-
-    promisifyChildProcess(child)
-      .then(() => {
-        return res.sendFile(`${certBaseDir}/fullchain.pem`, {
-          headers: {
-            "Content-Type": "application/x-pem-file",
-          },
-        });
-      })
-      .catch((err) => {
-        console.log(err);
-        next(err);
-      });
+    res.sendFile(fullchainPath, {
+      headers: {
+        "Content-Type": "application/x-pem-file"
+      }
+    });
   })
 );
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  return res.status(500).json({
-    error: err,
-  });
+app.use((_req: Request, res: Response) => {
+  res.status(404).send("Not Found");
 });
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  return res.status(404).json({
-    error: "Not Found",
-  });
-});
+// Default error handler
+app.use(function (err, _req, res, next) {
+  console.log(err);
+
+  if (res.headersSent) {
+    return next(err);
+  } else {
+    const code = err instanceof HttpError ? err.code : 500;
+    res.status(code).send(err.message);
+  }
+} as ErrorRequestHandler);
 
 export { app };

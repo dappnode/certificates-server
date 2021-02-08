@@ -1,13 +1,27 @@
+FROM node:12-alpine AS node-builder
+
+WORKDIR /app
+
+# Install all deps to build
+COPY package.json yarn.lock ./
+RUN yarn install
+
+COPY . ./
+RUN yarn run build
+
+# Re-install only production for final layer
+RUN rm -rf node_modules && yarn install --production
+
+
+
 FROM certbot/dns-rfc2136:v1.9.0
 
 RUN apk add --update nodejs npm && mkdir -p /usr/app
 WORKDIR /usr/app
 
-COPY . .
-
-RUN npm install
+COPY --from=node-builder /app/node_modules ./node_modules
+COPY --from=node-builder /app/dist .
 
 EXPOSE 5000
 
-ENTRYPOINT ["npm", "run"]
-CMD ["start"]
+ENTRYPOINT ["node", "index"]

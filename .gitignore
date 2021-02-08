@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 creds.ini
+/test/certs
+yarn-error.log
