@@ -130,7 +130,7 @@ app.post(
     ].filter((part): part is string => Boolean(part));
 
     await shell(command).catch(e => {
-      e.message = `Error running certbod: ${e.message}`;
+      e.message = `Error running certbot: ${e.message}`;
       console.error(e);
       throw e;
     });
