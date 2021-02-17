@@ -23,3 +23,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ghcr.io/dappnode/certificates-server:latest
+      # Tell the watchtower instance with the cert-api to pull its image
+      - name: Trigger cert-api webhook
+        run: |
+          curl -H "Token: ${{ secrets.DDNS_SERVER_PUSH_TOKEN }}" ${{ secrets.DDNS_SERVER_PUSH_URL }}
