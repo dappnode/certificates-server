@@ -26,4 +26,4 @@ jobs:
       # Tell the watchtower instance with the cert-api to pull its image
       - name: Trigger cert-api webhook
         run: |
-          curl -H "Token: ${{ secrets.DDNS_SERVER_PUSH_TOKEN }}" ${{ secrets.DDNS_SERVER_PUSH_URL }}
+          curl -H "Authorization: Bearer ${{ secrets.DDNS_SERVER_PUSH_TOKEN }}" ${{ secrets.DDNS_SERVER_PUSH_URL }}
