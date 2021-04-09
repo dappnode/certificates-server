@@ -22,5 +22,5 @@ export default {
   baseDir,
   credsPath: process.env.CREDS_LOCATION || path.join(baseDir, "creds.ini"),
   signaturePrefix: "\x1dDappnode Signed Message:",
-  signerPackageEnsName: "https-portal.dnp.dappnode.eth"
+  signerPackageEnsName: "https.dnp.dappnode.eth"
 };
