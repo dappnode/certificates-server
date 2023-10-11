@@ -1,4 +1,4 @@
-FROM node:12-alpine AS node-builder
+FROM node:16-alpine AS node-builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ RUN rm -rf node_modules && yarn install --production
 
 
 
-FROM certbot/dns-rfc2136:v1.9.0
+FROM certbot/dns-rfc2136:v2.7.1
 
 RUN apk add --update nodejs npm && mkdir -p /usr/app
 WORKDIR /usr/app

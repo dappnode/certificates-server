@@ -26,7 +26,7 @@ export async function shell(
       { timeout, maxBuffer }
     );
     return stdout.trim();
-  } catch (e) {
+  } catch (e: any) {
     // Rethrow a typed error, and ignore the internal NodeJS stack trace
     const err: child.ExecException = e;
     if (err.signal === "SIGTERM")
