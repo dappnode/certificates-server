@@ -30,7 +30,7 @@ const upload = multer({
 app.use(
   rateLimit({
     windowMs: parseInt(config.rateLimitWindowMs),
-    max: config.debug ? 0 : config.rateLimitMax
+    limit: config.debug ? undefined : config.rateLimitMax
   })
 );
 
