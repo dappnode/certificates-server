@@ -1,20 +1,20 @@
 import os from "os";
 import fs from "fs";
 import path from "path";
-import rimraf from "rimraf";
+import { rimrafSync } from "rimraf";
 import express, { ErrorRequestHandler, Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import multer from "multer";
-import config from "./config";
+import config from "./config.js";
 import {
   shell,
   HttpError,
   BadRequestError,
   isHex,
   assertValidSignedDappnodeMessage
-} from "./utils";
+} from "./utils/index.js";
 
 const maxCsrSize = 10e3; // 10 KB;
 const renewalTimeThresholdMs = config.renewalTimeThresholdSec * 1000;
@@ -98,7 +98,7 @@ app.post(
       });
     }
 
-    rimraf.sync(certBaseDir);
+    rimrafSync(certBaseDir);
     fs.mkdirSync(certBaseDir, { recursive: true });
 
     // Must attach Certificate Signing Request as "csr" formData
@@ -108,6 +108,13 @@ app.post(
       throw new BadRequestError("CSR to big");
 
     fs.writeFileSync(csrPath, req.file.buffer);
+
+
+    const csrDomain = await shell(`openssl req -in ${csrPath} -subject -noout | cut -c 31-`);
+    if (csrDomain != "dyndns.dappnode.io") {
+      rimrafSync(certBaseDir);
+      throw new BadRequestError("CSR Subject invalid.");
+    }
 
     const command = [
       "certbot",

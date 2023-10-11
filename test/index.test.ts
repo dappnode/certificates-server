@@ -17,7 +17,7 @@ import csrgen from "csr-gen";
 
 describe("app", () => {
   let request: SuperAgentTest;
-  let wallet: ethers.Wallet;
+  let wallet: ethers.HDNodeWallet;
 
   before("Create random identity", async () => {
     request = agent(app);
@@ -30,16 +30,16 @@ describe("app", () => {
   });
 
   function createQueryString(timestamp: number): string {
-    const signingKey: ethers.utils.SigningKey = new ethers.utils.SigningKey(
+    const signingKey: ethers.SigningKey = new ethers.SigningKey(
       wallet.privateKey
     );
-    const signDigest = signingKey.signDigest.bind(signingKey);
+    const signDigest = signingKey.sign.bind(signingKey);
     const signer = config.signerPackageEnsName;
-    const hash = ethers.utils.solidityKeccak256(
+    const hash = ethers.solidityPackedKeccak256(
       ["string"],
       [prepareMessageFromPackage(signer, timestamp.toString())]
     );
-    const signature = ethers.utils.joinSignature(signDigest(hash));
+    const signature = ethers.Signature.from(signDigest(hash)).serialized;
     const params: RequestQueryOptions = {
       address: wallet.address,
       timestamp: timestamp.toString(),

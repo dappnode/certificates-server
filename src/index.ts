@@ -1,4 +1,4 @@
-import { app } from "./app";
+import { app } from "./app.js";
 import { AddressInfo } from "net";
 
 const server = app.listen(5000, "0.0.0.0", () => {
