@@ -2,7 +2,7 @@ const userIdLen = 16;
 const prefix0xLen = 2;
 
 export function isHex(s: string): boolean {
-  return /^0x[a-zA-Z0-9]+/.test(s);
+  return /^0x[0-9a-fA-F]+$/.test(s);
 }
 
 /**
