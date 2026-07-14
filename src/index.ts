@@ -1,7 +1,7 @@
 import { app } from "./app";
-import { AddressInfo } from "net";
+import { AddressInfo } from "node:net";
 
 const server = app.listen(5000, "0.0.0.0", () => {
   const { port, address } = server.address() as AddressInfo;
-  console.log("Server listening on:", "http://" + address + ":" + port);
+  console.log(`Server listening on: http://${address}:${port}`);
 });

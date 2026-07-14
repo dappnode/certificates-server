@@ -24,8 +24,8 @@ export function assertValidSignedDappnodeMessage({
     config.signerPackageEnsName,
     timestamp.toString()
   );
-  const hash = ethers.utils.solidityKeccak256(["string"], [message]);
-  const signingAddress = ethers.utils.recoverAddress(hash, signature);
+  const hash = ethers.solidityPackedKeccak256(["string"], [message]);
+  const signingAddress = ethers.recoverAddress(hash, signature);
 
   // validate signature
   if (signingAddress.toLowerCase() !== address.toLowerCase()) {
