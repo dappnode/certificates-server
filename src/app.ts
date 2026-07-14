@@ -10,6 +10,8 @@ import {
   shell,
   HttpError,
   BadRequestError,
+  InvalidCertificateSigningRequestError,
+  assertValidCertificateSigningRequest,
   getUserId,
   isHex,
   assertValidSignedDappnodeMessage
@@ -22,8 +24,10 @@ const app = express();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  // Prevent an attacker from filling the memory with a large file
-  limits: { fields: 1, fileSize: maxCsrSize, files: 1, parts: 1 }
+  // Do not set `parts`: Busboy 1 emits its limit event when the limit is
+  // reached, so Multer would reject the one allowed CSR part.
+  // The field and file limits still allow only one file named `csr`.
+  limits: { fields: 0, fileSize: maxCsrSize, files: 1 }
 });
 
 app.use(
@@ -44,9 +48,14 @@ export interface RequestQueryOptions {
 app.use(morgan("tiny"));
 app.post("/", upload.single("csr"), async (req, res) => {
   const query = req.query as unknown as RequestQueryOptions;
-  const { address, signature } = query;
-  const timestamp = Number(query.timestamp); // In seconds
-  const force = query.force === "true";
+  const address = typeof query.address === "string" ? query.address : undefined;
+  const signature =
+    typeof query.signature === "string" ? query.signature : undefined;
+  const timestamp =
+    typeof query.timestamp === "string" ? Number(query.timestamp) : NaN; // In seconds
+  const force =
+    typeof query.force === "string" &&
+    (query.force === "1" || query.force.toLowerCase() === "true");
 
   const nowMs = Date.now();
   const nowSec = nowMs / 1000;
@@ -105,6 +114,16 @@ app.post("/", upload.single("csr"), async (req, res) => {
     throw new BadRequestError("Missing Certificate Signing Request (CSR)");
   if (req.file.buffer.length > maxCsrSize)
     throw new BadRequestError("CSR too big");
+
+  const expectedDomain = `${userId}.${config.certificateDomainSuffix}`;
+  try {
+    await assertValidCertificateSigningRequest(req.file.buffer, expectedDomain);
+  } catch (error) {
+    if (error instanceof InvalidCertificateSigningRequestError) {
+      throw new BadRequestError(error.message);
+    }
+    throw error;
+  }
 
   fs.rmSync(certBaseDir, { recursive: true, force: true });
   fs.mkdirSync(certBaseDir, { recursive: true });

@@ -46,13 +46,14 @@ RUN_INTEGRATION_TESTS=true DEBUG=1 yarn test
 
 ## Configuration environment variables
 
-| Name                   | Default value              | Description                                                                           |
-| ---------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| BASE_DIR               | /etc/letsencrypt/          | Base directory in which certs are stored                                              |
-| DEBUG                  | false                      | If true, uses fake certificates                                                       |
-| RATE_LIMIT_WINDOW_MS   | 3600000                    | Size of rate limit interval                                                           |
-| RATE_LIMIT_MAX         | 5                          | Max tries in rate limit interval                                                      |
-| DYNDNS_THRESHOLD       | 600                        | Time threshold for validating a request                                               |
-| RENEWAL_TIME_THRESHOLD | 6480000                    | If two requests for same certificate come within this time, old certificate is resent |
-| LETSENCRYPT_EMAIL      | None                       | Email for letsencrypt account                                                         |
-| CREDS_LOCATION         | /etc/letsencrypt/creds.ini | Location of credentials file                                                          |
+| Name                      | Default value              | Description                                                                           |
+| ------------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
+| BASE_DIR                  | /etc/letsencrypt/          | Base directory in which certs are stored                                              |
+| DEBUG                     | false                      | If true, uses fake certificates                                                       |
+| RATE_LIMIT_WINDOW_MS      | 3600000                    | Size of rate limit interval                                                           |
+| RATE_LIMIT_MAX            | 5                          | Max tries in rate limit interval                                                      |
+| DYNDNS_THRESHOLD          | 600                        | Time threshold for validating a request                                               |
+| RENEWAL_TIME_THRESHOLD    | 6480000                    | If two requests for same certificate come within this time, old certificate is resent |
+| CERTIFICATE_DOMAIN_SUFFIX | dyndns.dappnode.io         | Required domain suffix for authenticated certificate requests                         |
+| LETSENCRYPT_EMAIL         | None                       | Email for letsencrypt account                                                         |
+| CREDS_LOCATION            | /etc/letsencrypt/creds.ini | Location of credentials file                                                          |

@@ -39,6 +39,8 @@ export default {
   email: process.env.LETSENCRYPT_EMAIL,
   baseDir,
   credsPath: process.env.CREDS_LOCATION || path.join(baseDir, "creds.ini"),
+  certificateDomainSuffix:
+    process.env.CERTIFICATE_DOMAIN_SUFFIX || "dyndns.dappnode.io",
   signaturePrefix: "\x1dDappnode Signed Message:",
   signerPackageEnsName: "https.dnp.dappnode.eth"
 };
