@@ -120,6 +120,10 @@ app.post("/", upload.single("csr"), async (req, res) => {
     await assertValidCertificateSigningRequest(req.file.buffer, expectedDomain);
   } catch (error) {
     if (error instanceof InvalidCertificateSigningRequestError) {
+      console.warn("CSR validation failed", {
+        reason: error.message,
+        ...error.details
+      });
       throw new BadRequestError(error.message);
     }
     throw error;
@@ -178,7 +182,7 @@ app.use((_req: Request, res: Response) => {
 });
 
 // Default error handler
-app.use(function (err, _req, res, next) {
+app.use(function (err, req, res, next) {
   if (res.headersSent) {
     console.error(err);
     return next(err);
@@ -189,6 +193,14 @@ app.use(function (err, _req, res, next) {
   else if (err instanceof multer.MulterError) code = 400;
 
   if (code >= 500) console.error(err);
+  else {
+    console.warn("Request rejected", {
+      method: req.method,
+      path: req.path,
+      status: code,
+      reason: err.message
+    });
+  }
   res.status(code).send(err.message);
 } as ErrorRequestHandler);
 

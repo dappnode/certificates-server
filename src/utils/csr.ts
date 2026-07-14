@@ -3,11 +3,23 @@ import os from "node:os";
 import path from "node:path";
 import { shell } from "./shell";
 
-export class InvalidCertificateSigningRequestError extends Error {}
-
-interface CertificateSigningRequestDetails {
+export interface CertificateSigningRequestDetails {
   commonName?: string;
   subjectAlternativeName?: string;
+}
+
+export interface CertificateSigningRequestValidationDetails extends CertificateSigningRequestDetails {
+  expectedDomain: string;
+  opensslError?: string;
+}
+
+export class InvalidCertificateSigningRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly details: CertificateSigningRequestValidationDetails
+  ) {
+    super(message);
+  }
 }
 
 export function parseCertificateSigningRequest(
@@ -84,12 +96,19 @@ export async function assertValidCertificateSigningRequest(
         ],
         { timeout: 10_000 }
       );
-    } catch {
-      throw new InvalidCertificateSigningRequestError("CSR invalid");
+    } catch (error) {
+      throw new InvalidCertificateSigningRequestError("CSR invalid", {
+        expectedDomain,
+        opensslError: error instanceof Error ? error.message : String(error)
+      });
     }
 
+    const details = parseCertificateSigningRequest(output);
     if (!isCertificateSigningRequestForDomain(output, expectedDomain)) {
-      throw new InvalidCertificateSigningRequestError("CSR domain invalid");
+      throw new InvalidCertificateSigningRequestError("CSR domain invalid", {
+        expectedDomain,
+        ...details
+      });
     }
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
